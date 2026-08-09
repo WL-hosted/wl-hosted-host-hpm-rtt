@@ -1,0 +1,56 @@
+import os
+from building import *
+
+cwd = GetCurrentDir()
+Import('*')
+
+if 'WLH_CORE_ROOT' not in globals():
+    bundled_core = os.path.join(cwd, 'core')
+    if os.path.isfile(os.path.join(bundled_core, 'SConscript')):
+        WLH_CORE_ROOT = bundled_core
+    else:
+        raise ValueError(
+            'WLH_CORE_ROOT is not exported and wlh_rtt_host/core is absent'
+        )
+
+WLH_CORE_ROOT = os.path.abspath(WLH_CORE_ROOT)
+if not os.path.isfile(os.path.join(WLH_CORE_ROOT, 'SConscript')):
+    raise ValueError('invalid WLH_CORE_ROOT: %s' % WLH_CORE_ROOT)
+
+src = []
+src += Glob('src/*.c')
+src += Glob('wlan/*.c')
+if GetDepend('WLH_RTT_HOST_USING_SDIO'):
+    src += Glob('transport/sdio/*.c')
+if GetDepend('WLH_RTT_HOST_USING_IPERF2'):
+    src += Glob('iperf2/*.c')
+
+path = [
+    cwd + '/include',
+    cwd + '/src',
+    WLH_CORE_ROOT + '/host-core/include',
+    WLH_CORE_ROOT + '/protocol/include',
+    WLH_CORE_ROOT + '/protocol/generated',
+    WLH_CORE_ROOT + '/protocol/third_party/nanopb',
+    WLH_CORE_ROOT + '/common/osal/include',
+    WLH_CORE_ROOT + '/common/log/include',
+]
+
+group = DefineGroup(
+    'wlh_rtt_host',
+    src,
+    depend=['PKG_USING_WL_HOSTED_RTT_HOST'],
+    CPPPATH=path,
+    CPPDEFINES=['WLH_LOG_BACKEND_RTT_ULOG'],
+    LOCAL_CCFLAGS='-Wall -Werror',
+)
+
+core_group = SConscript(
+    os.path.join(WLH_CORE_ROOT, 'SConscript'),
+    variant_dir=os.path.join('build', 'wlh-core'),
+    duplicate=0,
+    exports={'WLH_CORE_ROLE': 'host'},
+)
+
+objs = group + core_group
+Return('objs')

@@ -1,0 +1,91 @@
+menuconfig PKG_USING_WL_HOSTED_RTT_HOST
+    bool "WL-hosted RT-Thread host adapter"
+    select RT_USING_WIFI
+    select RT_WLAN_MANAGE_ENABLE
+    select RT_WLAN_MSH_CMD_ENABLE
+    select RT_WLAN_PROT_ENABLE
+    select RT_WLAN_PROT_LWIP_ENABLE
+    select RT_WLAN_WORK_THREAD_ENABLE
+    select RT_USING_LWIP
+    select RT_USING_NETDEV
+    select RT_USING_SAL
+    select RT_USING_SDIO
+    select RT_LWIP_DHCP
+    select LWIP_USING_DHCPD
+    select RT_LWIP_TCP
+    select RT_LWIP_UDP
+    select RT_LWIP_DNS
+    select RT_LWIP_ICMP
+    select RT_LWIP_USING_PING
+    default n
+
+if PKG_USING_WL_HOSTED_RTT_HOST
+
+config WLH_RTT_HOST_USING_SDIO
+    bool "Use the RT-Thread SDIO transport"
+    default y
+
+config WLH_RTT_HOST_USING_STA
+    bool "Enable the station interface"
+    default y
+
+config WLH_RTT_HOST_USING_SOFTAP
+    bool "Enable the SoftAP interface"
+    default y
+
+config WLH_RTT_HOST_USING_IPERF2
+    bool "Build the IPv4 iPerf2 client/server"
+    default y
+
+config WLH_RTT_HOST_USING_DIAGNOSTICS
+    bool "Enable diagnostic counters"
+    default y
+
+config WLH_RTT_HOST_STA_DEVICE_NAME
+    string "Station WLAN device name"
+    default "wlan0"
+
+config WLH_RTT_HOST_AP_DEVICE_NAME
+    string "SoftAP WLAN device name"
+    default "wlan1"
+
+config WLH_RTT_HOST_TX_QUEUE_DEPTH
+    int "Bounded transport TX queue depth"
+    range 2 64
+    default 16
+
+config WLH_RTT_HOST_RX_POOL_PER_INTERFACE
+    int "Fixed RX buffers per interface"
+    range 2 64
+    default 16
+
+config WLH_RTT_HOST_CORE_STACK_SIZE
+    int "Host Core task stack bytes"
+    range 4096 65536
+    default 16384
+
+config WLH_RTT_HOST_SDIO_STACK_SIZE
+    int "SDIO worker stack bytes"
+    range 2048 16384
+    default 4096
+
+config WLH_RTT_HOST_RX_STACK_SIZE
+    int "WLAN RX worker stack bytes"
+    range 2048 16384
+    default 3072
+
+config WLH_RTT_HOST_RPC_TIMEOUT_MS
+    int "RPC timeout milliseconds"
+    range 1000 60000
+    default 10000
+
+config WLH_RTT_HOST_AP_MAX_CLIENTS
+    int "Maximum SoftAP clients"
+    range 1 16
+    default 4
+
+config WLH_RTT_HOST_AP_SERVER_IP
+    string "SoftAP DHCP server IPv4 address"
+    default "192.168.169.1"
+
+endif

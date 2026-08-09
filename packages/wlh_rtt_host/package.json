@@ -1,0 +1,31 @@
+{
+  "name": "wlh_rtt_host",
+  "description": "Portable WL-hosted Host Core adapter for RT-Thread WLAN and SDIO",
+  "type": "rt-thread-component",
+  "dependencies": [
+    "RT_USING_WIFI",
+    "RT_USING_LWIP",
+    "RT_USING_NETDEV",
+    "RT_USING_SAL"
+  ],
+  "defines": [
+    "WLH_LOG_BACKEND_RTT_ULOG"
+  ],
+  "sources": [
+    {
+      "dependencies": ["PKG_USING_WL_HOSTED_RTT_HOST"],
+      "includes": ["include", "src"],
+      "files": ["src/*.c", "wlan/*.c"]
+    },
+    {
+      "dependencies": ["WLH_RTT_HOST_USING_SDIO"],
+      "includes": ["transport/sdio"],
+      "files": ["transport/sdio/*.c"]
+    },
+    {
+      "dependencies": ["WLH_RTT_HOST_USING_IPERF2"],
+      "includes": ["iperf2"],
+      "files": ["iperf2/*.c"]
+    }
+  ]
+}

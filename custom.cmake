@@ -1,4 +1,12 @@
-# ===== 辅助构建目标（由生成的 CMakeLists.txt include，勿在此修改编译选项） =====
+# ===== 构建定制（由生成的 CMakeLists.txt include） =====
+
+# RT-Thread 5.2.0 的 DHCPD 源文件漏掉 string.h。GCC 15 默认拒绝隐式函数
+# 声明；这里只对该上游源文件强制包含标准头，不修改 RT-Thread submodule。
+# TODO: RT-Thread 更新到包含该修复的版本后移除这个兼容选项。
+set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/rt-thread/components/net/lwip-dhcpd/dhcp_server_raw.c
+    PROPERTIES COMPILE_OPTIONS "-include;string.h"
+)
 
 include(ExternalProject)
 

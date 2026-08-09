@@ -99,6 +99,10 @@ static hpm_stat_t hpm_sdmmc_transfer(struct hpm_mmcsd *mmcsd, sdxc_adma_config_t
 static rt_int32_t hpm_sdmmc_execute_tuning(struct rt_mmcsd_host *host, rt_int32_t opcode);
 static rt_err_t hpm_sdmmc_signal_voltage_switch(struct rt_mmcsd_host *host, struct rt_mmcsd_io_cfg *io_cfg);
 
+ATTR_WEAK void rt_hw_sdxc_prepare_device(void)
+{
+}
+
 static void hpm_sdmmc_power_on_via_pin(struct hpm_mmcsd *mmcsd);
 static void hpm_sdmmc_power_off_via_pin(struct hpm_mmcsd *mmcsd);
 
@@ -175,7 +179,7 @@ static rt_err_t hpm_sdmmc_signal_voltage_switch(struct rt_mmcsd_host *host, stru
     }
 
     /* 3. Switch to 1.8V/3.3V */
-    if (ios->signal_voltage == MMCSD_SIGNAL_VOLTAGE_330)
+    if (io_cfg->signal_voltage == MMCSD_SIGNAL_VOLTAGE_330)
     {
         hpm_sdmmc_switch_to_3v3_via_pin(mmcsd);
         sdxc_select_voltage(mmcsd->sdxc_base, sdxc_bus_voltage_sd_3v3);
@@ -233,7 +237,10 @@ void hpm_sdmmc_isr(struct hpm_mmcsd *mmcsd)
         ((int_signal_en & SDXC_INT_STAT_CARD_INTERRUPT_MASK) != 0))
     {
         hpm_sdmmc_enable_sdio_irq(mmcsd->host, 0);
-        rt_sem_release(mmcsd->host->sdio_irq_sem);
+        if (mmcsd->host->sdio_irq_sem != RT_NULL)
+        {
+            rt_sem_release(mmcsd->host->sdio_irq_sem);
+        }
     }
     if (mmcsd->enable_interrupt_driven)
     {
@@ -577,6 +584,10 @@ static hpm_stat_t hpm_sdmmc_transfer_interrupt_driven(struct hpm_mmcsd *mmcsd, s
         {
             status = sdxc_parse_interrupt_status(base);
         }
+        else
+        {
+            status = status_timeout;
+        }
     }
     if (status == status_success)
     {
@@ -674,33 +685,44 @@ static void hpm_sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *r
         adma_config.adma_table = (uint32_t*) core_local_mem_to_sys_address(BOARD_RUNNING_CORE,
                                                                            (uint32_t) mmcsd->sdxc_adma_table);
         adma_config.adma_table_words = SDXC_ADMA_TABLE_WORDS;
-        size_t xfer_buf_addr = (uint32_t)data->buf;
+        uint32_t xfer_buf_addr = (uint32_t)data->buf;
         uint32_t xfer_len = data->blks * data->blksize;
         bool need_cache_maintenance = true;
-        if ((req->data->flags & DATA_DIR_WRITE) != 0U)
+        if (xfer_len == 0U)
+        {
+            cmd->err = -RT_EINVAL;
+            mmcsd_req_complete(host);
+            return;
+        }
+        if ((data->flags & DATA_DIR_WRITE) != 0U)
         {
             uint32_t write_size = xfer_len;
-            size_t aligned_start;
+            uint32_t cache_start;
             uint32_t aligned_size;
             if ((xfer_buf_addr % CACHELINE_SIZE != 0) || (write_size % CACHELINE_SIZE != 0))
             {
-                uint32_t write_size = xfer_len;
                 aligned_size = SDXC_CACHELINE_ALIGN_UP(write_size);
+                if (aligned_size > mmcsd->data_buf_size)
+                {
+                    cmd->err = -RT_EINVAL;
+                    mmcsd_req_complete(host);
+                    return;
+                }
                 rt_memcpy(mmcsd->data_buf, data->buf, xfer_len);
                 rt_memset(&mmcsd->data_buf[write_size], 0, aligned_size - write_size);
                 sdxc_data.tx_data = (uint32_t const *)core_local_mem_to_sys_address(BOARD_RUNNING_CORE, (uint32_t)mmcsd->data_buf);
-                aligned_start = (uint32_t)sdxc_data.tx_data;
+                cache_start = (uint32_t)mmcsd->data_buf;
                 need_cache_maintenance = !mmcsd->use_noncacheable_buf;
             }
             else
             {
                 sdxc_data.tx_data = (uint32_t const *)core_local_mem_to_sys_address(BOARD_RUNNING_CORE, xfer_buf_addr);
-                aligned_start = (uint32_t)sdxc_data.tx_data;
+                cache_start = xfer_buf_addr;
                 aligned_size = write_size;
             }
             if (need_cache_maintenance)
             {
-                l1c_dc_flush(aligned_start, aligned_size);
+                l1c_dc_flush(cache_start, aligned_size);
             }
 
             sdxc_data.rx_data = NULL;
@@ -709,10 +731,18 @@ static void hpm_sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *r
         {
             uint32_t read_size = xfer_len;
             uint32_t aligned_read_size;
+            uint32_t cache_start;
             if ((xfer_buf_addr % CACHELINE_SIZE != 0) || (read_size % CACHELINE_SIZE != 0))
             {
                 aligned_read_size = SDXC_CACHELINE_ALIGN_UP(read_size);
+                if (aligned_read_size > mmcsd->data_buf_size)
+                {
+                    cmd->err = -RT_EINVAL;
+                    mmcsd_req_complete(host);
+                    return;
+                }
                 sdxc_data.rx_data = (uint32_t *)core_local_mem_to_sys_address(BOARD_RUNNING_CORE, (uint32_t)mmcsd->data_buf);
+                cache_start = (uint32_t)mmcsd->data_buf;
                 need_copy_back = true;
                 need_cache_maintenance = !mmcsd->use_noncacheable_buf;
             }
@@ -720,57 +750,40 @@ static void hpm_sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *r
             {
                 aligned_read_size = read_size;
                 sdxc_data.rx_data = (uint32_t *)core_local_mem_to_sys_address(BOARD_RUNNING_CORE, xfer_buf_addr);
+                cache_start = xfer_buf_addr;
             }
             /* Invalidate cache-line for the new allocated buffer */
             if (need_cache_maintenance)
             {
-                l1c_dc_invalidate((uint32_t)sdxc_data.rx_data, aligned_read_size);
+                l1c_dc_invalidate(cache_start, aligned_read_size);
             }
             sdxc_data.tx_data = RT_NULL;
         }
         xfer.data = &sdxc_data;
 
-        /* Align the write/read size since the ADMA engine in the SDXC cannot transfer unaligned size of data */
-        if ((cmd->cmd_code == SD_IO_RW_EXTENDED) && (xfer_len % SDXC_ADMA_XFER_SIZE_ALIGNMENT != 0))
-        {
-            sdio_cmd53_arg_t cmd53_arg;
-            cmd53_arg.value = sdxc_cmd.cmd_argument;
-            cmd53_arg.count = HPM_ALIGN_UP(xfer_len, SDXC_ADMA_XFER_SIZE_ALIGNMENT);
-            sdxc_cmd.cmd_argument = cmd53_arg.value;
-            sdxc_data.block_size = HPM_ALIGN_UP(xfer_len, SDXC_ADMA_XFER_SIZE_ALIGNMENT);
-        }
+        /* CMD53 count is a byte count in byte mode and a block count in block
+         * mode. Never rewrite it to an aligned byte count here: the RT-Thread
+         * SDIO layer already supplies aligned transfers and owns the mode. */
     }
 
-    if ((req->data->blks > 1) && ((cmd->cmd_code == READ_MULTIPLE_BLOCK) || ((cmd->cmd_code == WRITE_MULTIPLE_BLOCK))))
+    if ((data != RT_NULL) && (data->blks > 1) &&
+        ((cmd->cmd_code == READ_MULTIPLE_BLOCK) ||
+         (cmd->cmd_code == WRITE_MULTIPLE_BLOCK)))
     {
         xfer.data->enable_auto_cmd12 = true;
     }
 
     err = hpm_sdmmc_transfer(mmcsd, &adma_config, &xfer);
-    LOG_I("cmd=%d, arg=%x\n", cmd->cmd_code, cmd->arg);
     if (err != status_success)
     {
         hpm_sdmmc_host_recovery(mmcsd->sdxc_base);
-        if (err != status_sdxc_cmd_timeout_error) /* Ignore command timeout error by default */
-        {
-            LOG_E(" ***hpm_sdmmc_transfer error: %d, cmd:%d, arg:0x%x*** -->\n", err, cmd->cmd_code, cmd->arg);
-        }
-        cmd->err = -RT_ERROR;
-    }
-    else
-    {
-        LOG_I(" ***hpm_sdmmc_transfer passed: %d*** -->\n", err);
-        if (sdxc_cmd.resp_type == sdxc_dev_resp_r2)
-        {
-            LOG_I("resp:0x%08x 0x%08x 0x%08x 0x%08x\n", sdxc_cmd.response[0],
-                                                        sdxc_cmd.response[1],
-                                                        sdxc_cmd.response[2],
-                                                        sdxc_cmd.response[3]);
-        }
-        else
-        {
-            LOG_I("resp:0x%08x\n", sdxc_cmd.response[0]);
-        }
+        LOG_E("SDXC transfer failed: status=%d cmd=%d arg=0x%x",
+              err, cmd->cmd_code, cmd->arg);
+        cmd->err = (err == status_timeout ||
+                    err == status_sdxc_cmd_timeout_error ||
+                    err == status_sdxc_data_timeout_error)
+                       ? -RT_ETIMEOUT
+                       : -RT_EIO;
     }
     if ((sdxc_data.rx_data != NULL) && (cmd->err == RT_EOK))
     {
@@ -1053,6 +1066,8 @@ int rt_hw_sdio_init(void)
 
     struct rt_mmcsd_host *host = NULL;
     struct hpm_mmcsd *mmcsd = NULL;
+
+    rt_hw_sdxc_prepare_device();
 
     for (uint32_t i = 0; i < ARRAY_SIZE(hpm_sdxcs); i++)
     {

@@ -6,6 +6,12 @@
 
 ## 补丁列表
 
+### [pending] 修复 drv_sdio 并适配 ESP32-C5 SDIO WLAN（2026-08-09）
+
+- 涉及文件：`libraries/drivers/drv_sdio.c`、`board/wlh_board.c`、`board/pinmux.c`。
+- 改动内容：修复 signal-voltage 参数误用、CMD52 空数据解引用、CMD53 byte/block count 被错误改写、传输超时映射、IRQ semaphore 判空、ADMA bounce-buffer 长度边界以及 cache maintenance 使用 DMA system address 的错误；去除逐命令 INFO 日志。保留 16 KiB noncacheable bounce buffer，RT-Thread SDIO worker 串行调用 CMD52/CMD53。增加弱 `rt_hw_sdxc_prepare_device()` hook，在 SDXC 枚举前由 HPM BSP 以 PA14 开漏低 100 ms、释放 1500 ms 对 ESP32-C5 冷复位。
+- 硬件依据：SDXC0 使用 PA11=CLK、PA10=CMD、PA12=D0、PA13=D1、PA08=D2、PA09=D3；PA14 是低有效 ESP_EN，外部上拉，禁止作为 card-detect 或推挽输出高。总线为 3.3 V，初始化约 375 kHz，协商 4-bit high-speed 后最高 50 MHz。
+
 ### [17240cd] 修复 drv_uart_v2 RX DMA 与 Serial V2 ping 缓冲协议错配（2026-08-07）
 
 - 涉及文件：`libraries/drivers/drv_uart_v2.c`

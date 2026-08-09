@@ -8,5 +8,6 @@ PKGS_DIR := packages
 
 source "$(RTT_DIR)/Kconfig"
 osource "$PKGS_DIR/Kconfig"
+rsource "packages/wlh_rtt_host/Kconfig"
 rsource "libraries/Kconfig"
 rsource "board/Kconfig"

@@ -10,7 +10,12 @@ src = Split("""
     fal_flash_port.c
 """)
 
+if GetDepend('PKG_USING_WL_HOSTED_RTT_HOST'):
+    src += ['wlh_board.c']
+
 CPPPATH = [cwd]
+if GetDepend('PKG_USING_WL_HOSTED_RTT_HOST'):
+    CPPPATH += [cwd + '/../packages/wlh_rtt_host/include']
 CPPDEFINES=['D45', 'HPM6360']
 
 group = DefineGroup('Board', src, depend = [''], CPPPATH = CPPPATH, CPPDEFINES = CPPDEFINES)

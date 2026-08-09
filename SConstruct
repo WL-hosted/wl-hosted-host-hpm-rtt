@@ -71,6 +71,9 @@ else:
 SDK_LIB = libraries_path_prefix
 Export('SDK_LIB')
 
+WLH_CORE_ROOT = os.path.abspath(os.path.join(SDK_ROOT, 'core'))
+Export('WLH_CORE_ROOT')
+
 
 GDB = rtconfig.GDB
 

@@ -1,0 +1,17 @@
+import rtconfig
+
+from building import *
+import os
+
+cwd = GetCurrentDir()
+
+src = Glob('*.c') + Glob('*.cpp')
+
+CPPDEFINES=[]
+CPPPATH = [cwd]
+
+group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH, CPPDEFINES=CPPDEFINES)
+
+group = group + SConscript(os.path.join('components', 'SConscript'))
+
+Return('group')

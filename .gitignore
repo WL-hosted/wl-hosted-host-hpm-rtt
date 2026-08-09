@@ -1,0 +1,13 @@
+build*/
+rtthread.elf
+rtthread.bin
+*.map
+__pycache__/
+.config.old
+.sconsign.dblite
+/CMakeLists.txt
+/.idea/
+packages/easylogger/demo/
+packages/flashdb/demos
+packages/SFUD/demo
+documents/
